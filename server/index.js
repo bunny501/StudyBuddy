@@ -31,6 +31,7 @@ app.use(cors({
       origin.endsWith('.vercel.app') ||
       origin.endsWith('.onrender.com') ||
       origin.endsWith('.railway.app') ||
+      origin.endsWith('.koyeb.app') ||
       process.env.NODE_ENV !== 'production'
     ) {
       return callback(null, true);
