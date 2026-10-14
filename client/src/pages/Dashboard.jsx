@@ -10,9 +10,9 @@ export default function Dashboard() {
   const [doubts, setDoubts] = useState([])
 
   useEffect(() => {
-    axios.get('https://study-buddy-production-16e9.up.railway.app/api/notes').then(r => setNotes(r.data.slice(0, 3))).catch(() => {})
-    axios.get('https://study-buddy-production-16e9.up.railway.app/api/groups').then(r => setGroups(r.data.slice(0, 3))).catch(() => {})
-    axios.get('https://study-buddy-production-16e9.up.railway.app/api/doubts').then(r => setDoubts(r.data.slice(0, 3))).catch(() => {})
+    axios.get('/api/notes').then(r => setNotes((r.data || []).slice(0, 3))).catch(() => {})
+    axios.get('/api/groups').then(r => setGroups((r.data || []).slice(0, 3))).catch(() => {})
+    axios.get('/api/doubts').then(r => setDoubts((r.data || []).slice(0, 3))).catch(() => {})
   }, [])
 
   return (

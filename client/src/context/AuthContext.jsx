@@ -18,7 +18,7 @@ export function AuthProvider({ children }) {
   }, [token])
 
   const login = async (username, password) => {
-    const { data } = await axios.post('https://study-buddy-production-16e9.up.railway.app/api/auth/login', { username, password })
+    const { data } = await axios.post('/api/auth/login', { username, password })
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
     axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`
@@ -28,7 +28,7 @@ export function AuthProvider({ children }) {
   }
 
   const register = async (form) => {
-    const { data } = await axios.post('https://study-buddy-production-16e9.up.railway.app/api/auth/register', form)
+    const { data } = await axios.post('/api/auth/register', form)
     localStorage.setItem('token', data.token)
     localStorage.setItem('user', JSON.stringify(data.user))
     axios.defaults.headers.common['Authorization'] = `Bearer ${data.token}`

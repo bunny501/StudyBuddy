@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
+import socket from '../socket'
 
 export default function Profile() {
   const { id } = useParams()
@@ -22,14 +23,39 @@ export default function Profile() {
   useEffect(() => {
     fetchProfile()
     if (isMe) {
-      axios.get('https://study-buddy-production-16e9.up.railway.app/api/doubts').then(r => setDoubts(r.data)).catch(() => {})
-      axios.get('https://study-buddy-production-16e9.up.railway.app/api/doubts/mine').then(r => setMyDoubts(r.data)).catch(() => {})
+      axios.get('/api/doubts').then(r => setDoubts(r.data)).catch(() => {})
+      axios.get('/api/doubts/mine').then(r => setMyDoubts(r.data)).catch(() => {})
     }
   }, [userId])
 
+  useEffect(() => {
+    const handleNewDoubt = (newDoubt) => {
+      setDoubts(ds => [newDoubt, ...ds.filter(d => d._id !== newDoubt._id)])
+      if (newDoubt.postedBy === me?._id) {
+        setMyDoubts(ds => [newDoubt, ...ds.filter(d => d._id !== newDoubt._id)])
+      }
+    }
+    const handleReply = (updatedDoubt) => {
+      setDoubts(ds => ds.map(d => d._id === updatedDoubt._id ? updatedDoubt : d))
+      setMyDoubts(ds => ds.map(d => d._id === updatedDoubt._id ? updatedDoubt : d))
+    }
+    const handleResolve = (updatedDoubt) => {
+      setDoubts(ds => ds.map(d => d._id === updatedDoubt._id ? updatedDoubt : d))
+      setMyDoubts(ds => ds.map(d => d._id === updatedDoubt._id ? updatedDoubt : d))
+    }
+    socket.on('doubt:new', handleNewDoubt)
+    socket.on('doubt:reply', handleReply)
+    socket.on('doubt:resolve', handleResolve)
+    return () => {
+      socket.off('doubt:new', handleNewDoubt)
+      socket.off('doubt:reply', handleReply)
+      socket.off('doubt:resolve', handleResolve)
+    }
+  }, [me?._id])
+
   const fetchProfile = async () => {
     try {
-      const { data } = await axios.get(`https://study-buddy-production-16e9.up.railway.app/api/users/profile/${userId}`)
+      const { data } = await axios.get(`/api/users/profile/${userId}`)
       setProfile(data); setForm({ college: data.college, branch: data.branch, subjects: data.subjects?.join(', '), availability: data.availability })
     } catch (e) {}
   }
@@ -37,7 +63,7 @@ export default function Profile() {
   const saveProfile = async (e) => {
     e.preventDefault()
     try {
-      await axios.put('https://study-buddy-production-16e9.up.railway.app/api/users/profile', { ...form, subjects: form.subjects?.split(',').map(s => s.trim()).filter(Boolean) })
+      await axios.put('/api/users/profile', { ...form, subjects: form.subjects?.split(',').map(s => s.trim()).filter(Boolean) })
       setEditing(false); fetchProfile()
     } catch (e) {}
   }
@@ -45,30 +71,34 @@ export default function Profile() {
   const postDoubt = async (e) => {
     e.preventDefault()
     try {
-      await axios.post('https://study-buddy-production-16e9.up.railway.app/api/doubts', doubtForm)
+      await axios.post('/api/doubts', doubtForm)
       setDoubtForm({ topic: '', description: '', subject: '' }); setShowDoubtForm(false)
-      axios.get('https://study-buddy-production-16e9.up.railway.app/api/doubts/mine').then(r => setMyDoubts(r.data))
+      axios.get('/api/doubts/mine').then(r => setMyDoubts(r.data))
     } catch (e) {}
   }
 
   const addReply = async (doubtId) => {
     if (!reply[doubtId]?.trim()) return
     try {
-      await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/doubts/${doubtId}/reply`, { text: reply[doubtId] })
+      await axios.post(`/api/doubts/${doubtId}/reply`, { text: reply[doubtId] })
       setReply(r => ({ ...r, [doubtId]: '' }))
-      axios.get('https://study-buddy-production-16e9.up.railway.app/api/doubts').then(r => setDoubts(r.data))
+      axios.get('/api/doubts').then(r => setDoubts(r.data))
     } catch (e) {}
   }
 
   const resolveDoubt = async (doubtId) => {
     try {
-      await axios.put(`https://study-buddy-production-16e9.up.railway.app/api/doubts/${doubtId}/resolve`)
-      axios.get('https://study-buddy-production-16e9.up.railway.app/api/doubts/mine').then(r => setMyDoubts(r.data))
+      await axios.put(`/api/doubts/${doubtId}/resolve`)
+      axios.get('/api/doubts/mine').then(r => setMyDoubts(r.data))
     } catch (e) {}
   }
 
   const acceptRequest = async (fromId) => {
-    try { await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/users/accept/${fromId}`); fetchProfile() } catch (e) {}
+    try { await axios.post(`/api/users/accept/${fromId}`); fetchProfile() } catch (e) {}
+  }
+
+  const rejectRequest = async (fromId) => {
+    try { await axios.post(`/api/users/reject/${fromId}`); fetchProfile() } catch (e) {}
   }
 
   if (!profile) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" /></div>
@@ -128,12 +158,26 @@ export default function Profile() {
       {isMe && profile.friendRequests?.length > 0 && (
         <div className="card">
           <h2 className="font-semibold mb-3">Friend Requests <span className="bg-red-500 text-white text-xs rounded-full px-1.5 py-0.5">{profile.friendRequests.length}</span></h2>
-          {profile.friendRequests.map(r => (
-            <div key={r._id || r} className="flex items-center justify-between py-2">
-              <p className="text-sm">{r.username || r}</p>
-              <button onClick={() => acceptRequest(r._id || r)} className="btn-primary text-xs">Accept</button>
-            </div>
-          ))}
+          <div className="space-y-2">
+            {profile.friendRequests.map(r => {
+              const reqId = r._id || r
+              const reqName = r.username || 'Study Partner'
+              return (
+                <div key={reqId} className="flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-700 last:border-0">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 bg-purple-500 rounded-lg flex items-center justify-center text-white text-xs font-bold">
+                      {reqName[0]?.toUpperCase()}
+                    </div>
+                    <p className="text-sm font-medium">{reqName}</p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => acceptRequest(reqId)} className="btn-primary text-xs">Accept</button>
+                    <button onClick={() => rejectRequest(reqId)} className="btn-secondary text-xs text-red-500 hover:text-red-600">Decline</button>
+                  </div>
+                </div>
+              )
+            })}
+          </div>
         </div>
       )}
 

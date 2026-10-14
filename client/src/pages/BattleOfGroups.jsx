@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import socket from '../socket'
@@ -29,18 +29,27 @@ export default function BattleOfGroups() {
     questions: [{ question: '', options: ['', '', '', ''], answer: '' }]
   })
 
+  const activeBattleRef = useRef(activeBattle)
+  useEffect(() => { activeBattleRef.current = activeBattle }, [activeBattle])
+
   useEffect(() => {
     fetchBattles()
-    axios.get('https://study-buddy-production-16e9.up.railway.app/api/groups').then(r => setGroups(r.data)).catch(() => {})
-    socket.on('battle:updated', (data) => { if (data.battleId === activeBattle?._id) fetchBattle(data.battleId) })
-    return () => socket.off('battle:updated')
+    axios.get('/api/groups').then(r => setGroups(r.data)).catch(() => {})
+    const handleUpdate = (data) => {
+      fetchBattles()
+      if (data.battleId && activeBattleRef.current && data.battleId === activeBattleRef.current._id) {
+        fetchBattle(data.battleId)
+      }
+    }
+    socket.on('battle:updated', handleUpdate)
+    return () => socket.off('battle:updated', handleUpdate)
   }, [])
 
   const fetchBattles = async () => {
-    try { const { data } = await axios.get('https://study-buddy-production-16e9.up.railway.app/api/battles'); setBattles(data) } catch (e) {}
+    try { const { data } = await axios.get('/api/battles'); setBattles(data) } catch (e) {}
   }
   const fetchBattle = async (id) => {
-    try { const { data } = await axios.get(`https://study-buddy-production-16e9.up.railway.app/api/battles/${id}`); setActiveBattle(data) } catch (e) {}
+    try { const { data } = await axios.get(`/api/battles/${id}`); setActiveBattle(data) } catch (e) {}
   }
 
   const addQ = () => setCreateForm(f => ({ ...f, questions: [...f.questions, { question: '', options: ['', '', '', ''], answer: '' }] }))
@@ -50,7 +59,7 @@ export default function BattleOfGroups() {
   const createBattle = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await axios.post('https://study-buddy-production-16e9.up.railway.app/api/battles', createForm)
+      const { data } = await axios.post('/api/battles', createForm)
       setActiveBattle(data); setAnswers(new Array(data.questions.length).fill(''))
       setView('lobby'); fetchBattles(); socket.emit('battle:join', data._id)
     } catch (e) {}
@@ -60,7 +69,7 @@ export default function BattleOfGroups() {
     if (!selectedGroup) return alert('Select a group first')
     const grp = groups.find(g => g._id === selectedGroup)
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/battles/${battle._id}/join`, { groupId: selectedGroup, groupName: grp?.name })
+      const { data } = await axios.post(`/api/battles/${battle._id}/join`, { groupId: selectedGroup, groupName: grp?.name })
       setActiveBattle(data); setAnswers(new Array(data.questions.length).fill(''))
       setView(data.status === 'active' ? 'active' : 'lobby')
       socket.emit('battle:join', data._id)
@@ -71,7 +80,7 @@ export default function BattleOfGroups() {
     if (!selectedGroup) return
     const grp = groups.find(g => g._id === selectedGroup)
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/battles/${activeBattle._id}/submit`, { groupId: selectedGroup, groupName: grp?.name, answers })
+      const { data } = await axios.post(`/api/battles/${activeBattle._id}/submit`, { groupId: selectedGroup, groupName: grp?.name, answers })
       setActiveBattle(data); setView('results')
       socket.emit('battle:update', { battleId: data._id })
     } catch (e) {}
@@ -80,13 +89,13 @@ export default function BattleOfGroups() {
   const postDiscuss = async () => {
     if (!discuss.text.trim()) return
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/battles/${activeBattle._id}/discuss`, discuss)
+      const { data } = await axios.post(`/api/battles/${activeBattle._id}/discuss`, discuss)
       setActiveBattle(data); setDiscuss(d => ({ ...d, text: '' }))
     } catch (e) {}
   }
 
   const upvote = async (idx) => {
-    try { const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/battles/${activeBattle._id}/discuss/${idx}/upvote`); setActiveBattle(data) } catch (e) {}
+    try { const { data } = await axios.post(`/api/battles/${activeBattle._id}/discuss/${idx}/upvote`); setActiveBattle(data) } catch (e) {}
   }
 
   return (

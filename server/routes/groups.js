@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const Group = require('../models/Group');
+const User = require('../models/User');
 const auth = require('../middleware/auth');
 const crypto = require('crypto');
 
@@ -36,7 +37,8 @@ router.post('/join', auth, async (req, res) => {
     const { inviteCode } = req.body;
     const group = await Group.findOne({ inviteCode });
     if (!group) return res.status(404).json({ message: 'Invalid code' });
-    if (!group.members.includes(req.user.id)) {
+    const isMember = group.members.some(m => m.toString() === req.user.id);
+    if (!isMember) {
       group.members.push(req.user.id);
       await group.save();
     }
@@ -49,6 +51,7 @@ router.post('/:id/task', auth, async (req, res) => {
   try {
     const { title, assignedTo } = req.body;
     const group = await Group.findById(req.params.id);
+    if (!group) return res.status(404).json({ message: 'Group not found' });
     group.tasks.push({ title, assignedTo });
     await group.save();
     res.json(group);
@@ -59,11 +62,33 @@ router.post('/:id/task', auth, async (req, res) => {
 router.put('/:id/task/:taskId', auth, async (req, res) => {
   try {
     const group = await Group.findById(req.params.id);
+    if (!group) return res.status(404).json({ message: 'Group not found' });
     const task = group.tasks.id(req.params.taskId);
+    if (!task) return res.status(404).json({ message: 'Task not found' });
+    const prevStatus = task.status;
     task.status = req.body.status;
     await group.save();
+
+    if (prevStatus !== 'completed' && req.body.status === 'completed') {
+      await User.findByIdAndUpdate(req.user.id, { $inc: { tasksCompleted: 1 } });
+    } else if (prevStatus === 'completed' && req.body.status !== 'completed') {
+      await User.findByIdAndUpdate(req.user.id, { $inc: { tasksCompleted: -1 } });
+    }
+
     res.json(group);
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
+// Leave group
+router.post('/:id/leave', auth, async (req, res) => {
+  try {
+    const group = await Group.findById(req.params.id);
+    if (!group) return res.status(404).json({ message: 'Group not found' });
+    group.members = group.members.filter(m => m.toString() !== req.user.id);
+    await group.save();
+    res.json({ message: 'Left group' });
+  } catch (e) { res.status(500).json({ message: e.message }); }
+});
+
 module.exports = router;
+

@@ -22,16 +22,23 @@ export default function TakeTest() {
   const [answers, setAnswers] = useState([])
   const [joinCode, setJoinCode] = useState('')
 
+  const activeTestRef = useRef(activeTest)
+  useEffect(() => { activeTestRef.current = activeTest }, [activeTest])
+
   useEffect(() => {
     fetchTests()
-    socket.on('test:updated', (data) => {
-      if (data.test) setActiveTest(data.test)
-    })
-    return () => socket.off('test:updated')
+    const handleUpdate = (data) => {
+      fetchTests()
+      if (data.test && activeTestRef.current && data.test._id === activeTestRef.current._id) {
+        setActiveTest(data.test)
+      }
+    }
+    socket.on('test:updated', handleUpdate)
+    return () => socket.off('test:updated', handleUpdate)
   }, [])
 
   const fetchTests = async () => {
-    try { const { data } = await axios.get('https://study-buddy-production-16e9.up.railway.app/api/tests'); setTests(data) } catch (e) {}
+    try { const { data } = await axios.get('/api/tests'); setTests(data) } catch (e) {}
   }
 
   const addQuestion = () => setForm(f => ({ ...f, questions: [...f.questions, { question: '', options: ['', '', '', ''], answer: '', type: 'mcq' }] }))
@@ -46,9 +53,10 @@ export default function TakeTest() {
   const createTest = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await axios.post('https://study-buddy-production-16e9.up.railway.app/api/tests', form)
+      const { data } = await axios.post('/api/tests', form)
       setActiveTest(data)
       setView('created') // show share screen, not active test
+      socket.emit('test:join', data._id)
       fetchTests()
     } catch (e) {}
   }
@@ -56,15 +64,23 @@ export default function TakeTest() {
   const joinTest = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/tests/${joinCode}/join`)
+      const { data } = await axios.post(`/api/tests/${joinCode}/join`)
       setActiveTest(data); setAnswers(new Array(data.questions.length).fill(''))
       setView('active'); socket.emit('test:join', data._id)
-    } catch (e) { alert('Test not found') }
+    } catch (e) { alert(e.response?.data?.message || 'Test not found') }
+  }
+
+  const startTest = async (t) => {
+    try {
+      const { data } = await axios.post(`/api/tests/${t._id}/join`)
+      setActiveTest(data); setAnswers(new Array(data.questions.length).fill(''))
+      setView('active'); socket.emit('test:join', data._id)
+    } catch (e) { alert(e.response?.data?.message || 'Unable to join test') }
   }
 
   const submitTest = async () => {
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/tests/${activeTest._id}/submit`, { answers })
+      const { data } = await axios.post(`/api/tests/${activeTest._id}/submit`, { answers })
       setActiveTest(data); setView('results')
       socket.emit('test:update', { testId: data._id, test: data })
     } catch (e) {}
@@ -112,7 +128,7 @@ export default function TakeTest() {
                   {t.createdBy === user._id || t.creatorName === user.username ? (
                     <span className="text-xs text-gray-400 italic">You created this</span>
                   ) : t.status !== 'completed' ? (
-                    <button onClick={() => { setActiveTest(t); setAnswers(new Array(t.questions.length).fill('')); setView('active'); socket.emit('test:join', t._id) }}
+                    <button onClick={() => startTest(t)}
                       className="btn-primary text-xs">Take Test</button>
                   ) : (
                     <button onClick={() => { setActiveTest(t); setView('results') }} className="btn-secondary text-xs">View Results</button>

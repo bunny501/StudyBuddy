@@ -1,0 +1,21 @@
+{
+  "name": "study-buddy",
+  "version": "1.0.0",
+  "description": "Study Buddy - Peer-to-peer collaborative learning platform",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "build": "npm --prefix client install && npm --prefix client run build && npm --prefix server install",
+    "postinstall": "npm --prefix server install",
+    "client": "npm --prefix client run dev",
+    "client:build": "npm --prefix client run build",
+    "server": "npm --prefix server start",
+    "server:dev": "npm --prefix server run dev",
+    "install:all": "npm --prefix client install && npm --prefix server install"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "author": "",
+  "license": "ISC"
+}

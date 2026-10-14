@@ -4,7 +4,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
 
-const sign = (user) => jwt.sign({ id: user._id, username: user.username }, process.env.JWT_SECRET, { expiresIn: '7d' });
+const JWT_SECRET = process.env.JWT_SECRET || 'study_buddy_jwt_secret_key_2024';
+const sign = (user) => jwt.sign({ id: user._id, username: user.username }, JWT_SECRET, { expiresIn: '7d' });
 
 router.post('/register', async (req, res) => {
   try {

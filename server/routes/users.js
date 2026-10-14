@@ -14,7 +14,11 @@ router.get('/', auth, async (req, res) => {
 // Get profile
 router.get('/profile/:id', auth, async (req, res) => {
   try {
-    const user = await User.findById(req.params.id).select('-password').populate('friends', 'username');
+    const user = await User.findById(req.params.id)
+      .select('-password')
+      .populate('friends', 'username')
+      .populate('friendRequests', 'username');
+    if (!user) return res.status(404).json({ message: 'User not found' });
     res.json(user);
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
@@ -33,7 +37,9 @@ router.post('/request/:id', auth, async (req, res) => {
   try {
     const target = await User.findById(req.params.id);
     if (!target) return res.status(404).json({ message: 'User not found' });
-    if (!target.friendRequests.includes(req.user.id)) {
+    const alreadyRequested = target.friendRequests.some(r => r.toString() === req.user.id);
+    const alreadyFriends = target.friends.some(f => f.toString() === req.user.id);
+    if (!alreadyRequested && !alreadyFriends) {
       target.friendRequests.push(req.user.id);
       await target.save();
     }
@@ -46,12 +52,25 @@ router.post('/accept/:id', auth, async (req, res) => {
   try {
     const me = await User.findById(req.user.id);
     const them = await User.findById(req.params.id);
+    if (!me || !them) return res.status(404).json({ message: 'User not found' });
     me.friendRequests = me.friendRequests.filter(r => r.toString() !== req.params.id);
-    if (!me.friends.includes(req.params.id)) me.friends.push(req.params.id);
-    if (!them.friends.includes(req.user.id)) them.friends.push(req.user.id);
+    if (!me.friends.some(f => f.toString() === req.params.id)) me.friends.push(req.params.id);
+    if (!them.friends.some(f => f.toString() === req.user.id)) them.friends.push(req.user.id);
     await me.save(); await them.save();
     res.json({ message: 'Friends now' });
   } catch (e) { res.status(500).json({ message: e.message }); }
 });
 
+// Reject friend request
+router.post('/reject/:id', auth, async (req, res) => {
+  try {
+    const me = await User.findById(req.user.id);
+    if (!me) return res.status(404).json({ message: 'User not found' });
+    me.friendRequests = me.friendRequests.filter(r => r.toString() !== req.params.id);
+    await me.save();
+    res.json({ message: 'Request rejected' });
+  } catch (e) { res.status(500).json({ message: e.message }); }
+});
+
 module.exports = router;
+

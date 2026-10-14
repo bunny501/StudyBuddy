@@ -1,11 +1,12 @@
 import { useEffect, useState, useRef } from 'react'
-import { useParams } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import axios from 'axios'
 import { useAuth } from '../context/AuthContext'
 import socket from '../socket'
 
 export default function GroupDetail() {
   const { id } = useParams()
+  const navigate = useNavigate()
   const { user } = useAuth()
   const [group, setGroup] = useState(null)
   const [tab, setTab] = useState('chat')
@@ -17,25 +18,41 @@ export default function GroupDetail() {
   const [taskForm, setTaskForm] = useState({ title: '', assignedTo: '' })
   const messagesEndRef = useRef()
 
+  const leaveGroup = async () => {
+    if (!window.confirm(`Are you sure you want to leave ${group?.name || 'this group'}?`)) return
+    try {
+      await axios.post(`/api/groups/${id}/leave`)
+      navigate('/groups')
+    } catch (e) {}
+  }
+
   useEffect(() => {
     fetchGroup()
     fetchMessages()
     fetchNotes()
     socket.emit('group:join', id)
-    socket.on('group:receive', (m) => setMessages(ms => [...ms, m]))
-    return () => socket.off('group:receive')
+    const handleReceive = (m) => {
+      if (!m.groupId || m.groupId === id) {
+        setMessages(ms => [...ms, m])
+      }
+    }
+    socket.on('group:receive', handleReceive)
+    return () => {
+      socket.off('group:receive', handleReceive)
+      socket.emit('group:leave', id)
+    }
   }, [id])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
   const fetchGroup = async () => {
-    try { const { data } = await axios.get(`https://study-buddy-production-16e9.up.railway.app/api/groups/${id}`); setGroup(data) } catch (e) {}
+    try { const { data } = await axios.get(`/api/groups/${id}`); setGroup(data) } catch (e) {}
   }
   const fetchMessages = async () => {
-    try { const { data } = await axios.get(`https://study-buddy-production-16e9.up.railway.app/api/messages/group/${id}`); setMessages(data) } catch (e) {}
+    try { const { data } = await axios.get(`/api/messages/group/${id}`); setMessages(data) } catch (e) {}
   }
   const fetchNotes = async () => {
-    try { const { data } = await axios.get(`https://study-buddy-production-16e9.up.railway.app/api/notes/group/${id}`); setNotes(data) } catch (e) {}
+    try { const { data } = await axios.get(`/api/notes/group/${id}`); setNotes(data) } catch (e) {}
   }
 
   const sendMsg = (e) => {
@@ -48,7 +65,7 @@ export default function GroupDetail() {
   const addNote = async (e) => {
     e.preventDefault()
     try {
-      await axios.post('https://study-buddy-production-16e9.up.railway.app/api/notes', { ...noteForm, groupId: id })
+      await axios.post('/api/notes', { ...noteForm, groupId: id })
       setNoteForm({ title: '', subject: '', content: '' }); setShowNoteForm(false); fetchNotes()
     } catch (e) {}
   }
@@ -56,14 +73,14 @@ export default function GroupDetail() {
   const addTask = async (e) => {
     e.preventDefault()
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/groups/${id}/task`, taskForm)
+      const { data } = await axios.post(`/api/groups/${id}/task`, taskForm)
       setGroup(data); setTaskForm({ title: '', assignedTo: '' })
     } catch (e) {}
   }
 
   const toggleTask = async (taskId, status) => {
     try {
-      const { data } = await axios.put(`https://study-buddy-production-16e9.up.railway.app/api/groups/${id}/task/${taskId}`, { status: status === 'pending' ? 'completed' : 'pending' })
+      const { data } = await axios.put(`/api/groups/${id}/task/${taskId}`, { status: status === 'pending' ? 'completed' : 'pending' })
       setGroup(data)
     } catch (e) {}
   }
@@ -74,10 +91,13 @@ export default function GroupDetail() {
     <div className="space-y-4">
       <div className="flex items-center gap-3">
         <div className="w-10 h-10 bg-blue-100 dark:bg-blue-900 rounded-xl flex items-center justify-center text-xl">👥</div>
-        <div>
+        <div className="flex-1 min-w-0">
           <h1 className="text-xl font-bold">{group.name}</h1>
-          <p className="text-gray-400 text-sm">{group.members?.length} members · Code: <span className="font-mono text-blue-600">{group.inviteCode}</span></p>
+          <p className="text-gray-400 text-sm">{group.members?.length} members · Code: <span className="font-mono text-blue-600 font-semibold">{group.inviteCode}</span></p>
         </div>
+        <button onClick={leaveGroup} className="btn-secondary text-xs text-red-500 hover:text-red-600 border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20">
+          Leave Group
+        </button>
       </div>
 
       {/* Tabs */}

@@ -13,13 +13,13 @@ export default function Groups() {
   useEffect(() => { fetchGroups() }, [])
 
   const fetchGroups = async () => {
-    try { const { data } = await axios.get('https://study-buddy-production-16e9.up.railway.app/api/groups'); setGroups(data) } catch (e) {}
+    try { const { data } = await axios.get('/api/groups'); setGroups(data) } catch (e) {}
   }
 
   const createGroup = async (e) => {
     e.preventDefault(); setError('')
     try {
-      await axios.post('https://study-buddy-production-16e9.up.railway.app/api/groups', form)
+      await axios.post('/api/groups', form)
       setForm({ name: '', subject: '' }); setShowCreate(false); fetchGroups()
     } catch (e) { setError(e.response?.data?.message || 'Error') }
   }
@@ -27,7 +27,7 @@ export default function Groups() {
   const joinGroup = async (e) => {
     e.preventDefault(); setError('')
     try {
-      await axios.post('https://study-buddy-production-16e9.up.railway.app/api/groups/join', { inviteCode })
+      await axios.post('/api/groups/join', { inviteCode })
       setInviteCode(''); setShowJoin(false); fetchGroups()
     } catch (e) { setError(e.response?.data?.message || 'Invalid code') }
   }

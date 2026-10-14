@@ -49,7 +49,7 @@ function TagMenu({ onTag, onClose }) {
   )
 }
 
-function NoteViewer({ note, onClose, onUpdate }) {
+function NoteViewer({ note, onClose, onUpdate, onDelete }) {
   const [tagMenu, setTagMenu] = useState(null)
   const [selection, setSelection] = useState(null)
   const [activeTag, setActiveTag] = useState(null)
@@ -72,7 +72,7 @@ function NoteViewer({ note, onClose, onUpdate }) {
   const addTag = async (type) => {
     if (!selection) return
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/notes/${note._id}/tag`, { ...selection, type })
+      const { data } = await axios.post(`/api/notes/${note._id}/tag`, { ...selection, type })
       onUpdate(data)
       setSelection(null)
     } catch (e) { console.error(e) }
@@ -81,7 +81,7 @@ function NoteViewer({ note, onClose, onUpdate }) {
   const addReply = async (tagId) => {
     if (!reply.trim()) return
     try {
-      const { data } = await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/notes/${note._id}/tag/${tagId}/reply`, { message: reply })
+      const { data } = await axios.post(`/api/notes/${note._id}/tag/${tagId}/reply`, { message: reply })
       onUpdate(data)
       setReply('')
     } catch (e) { console.error(e) }
@@ -89,7 +89,7 @@ function NoteViewer({ note, onClose, onUpdate }) {
 
   const resolveTag = async (tagId) => {
     try {
-      const { data } = await axios.put(`https://study-buddy-production-16e9.up.railway.app/api/notes/${note._id}/tag/${tagId}/resolve`)
+      const { data } = await axios.put(`/api/notes/${note._id}/tag/${tagId}/resolve`)
       onUpdate(data)
     } catch (e) { console.error(e) }
   }
@@ -97,10 +97,31 @@ function NoteViewer({ note, onClose, onUpdate }) {
   const filteredTags = note.tags?.filter(t => filterType === 'all' || t.type === filterType) || []
 
   const renderContent = () => {
-    let content = note.content
-    const tags = [...(note.tags || [])].sort((a, b) => (b.startIndex || 0) - (a.startIndex || 0))
-    // Simple highlight rendering
-    return <p className="text-sm leading-relaxed whitespace-pre-wrap select-text">{content}</p>
+    const content = note.content || ''
+    if (!note.tags || note.tags.length === 0) {
+      return <p className="text-sm leading-relaxed whitespace-pre-wrap select-text">{content}</p>
+    }
+
+    // Segment content by tags for highlighting
+    return (
+      <div className="text-sm leading-relaxed whitespace-pre-wrap select-text">
+        {content}
+        <div className="mt-4 pt-3 border-t border-gray-100 dark:border-gray-700">
+          <p className="text-xs font-semibold text-gray-500 mb-2">Tagged Highlights:</p>
+          <div className="flex flex-wrap gap-2">
+            {note.tags.map((t, idx) => (
+              <span
+                key={t._id || idx}
+                onClick={() => setActiveTag(t)}
+                className={`cursor-pointer px-2 py-1 rounded-lg text-xs font-medium ${TAG_COLORS[t.type] || 'bg-gray-200'} ${t.resolved ? 'opacity-50 line-through' : ''}`}
+              >
+                {TAG_ICONS[t.type]} "{t.text}"
+              </span>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -111,7 +132,18 @@ function NoteViewer({ note, onClose, onUpdate }) {
             <h2 className="font-bold text-lg">{note.title}</h2>
             <p className="text-blue-600 text-sm">{note.subject}</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          <div className="flex items-center gap-2">
+            {onDelete && (
+              <button
+                onClick={() => onDelete(note._id)}
+                className="text-red-500 hover:text-red-700 text-xs px-2.5 py-1 rounded-lg border border-red-200 dark:border-red-800 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
+                title="Delete note"
+              >
+                🗑️ Delete
+              </button>
+            )}
+            <button onClick={onClose} className="text-gray-400 hover:text-gray-600 text-xl">✕</button>
+          </div>
         </div>
 
         <div className="flex flex-1 overflow-hidden">
@@ -191,13 +223,13 @@ export default function MyNotes() {
   useEffect(() => { fetchNotes() }, [])
 
   const fetchNotes = async () => {
-    try { const { data } = await axios.get('https://study-buddy-production-16e9.up.railway.app/api/notes'); setNotes(data) } catch (e) {}
+    try { const { data } = await axios.get('/api/notes'); setNotes(data) } catch (e) {}
   }
 
   const submit = async (e) => {
     e.preventDefault(); setLoading(true)
     try {
-      await axios.post('https://study-buddy-production-16e9.up.railway.app/api/notes', form)
+      await axios.post('/api/notes', form)
       setForm({ title: '', subject: '', content: '' })
       setShowForm(false)
       fetchNotes()
@@ -207,6 +239,15 @@ export default function MyNotes() {
   const updateNote = (updated) => {
     setNotes(ns => ns.map(n => n._id === updated._id ? updated : n))
     setSelected(updated)
+  }
+
+  const deleteNote = async (id) => {
+    if (!window.confirm('Are you sure you want to delete this note?')) return
+    try {
+      await axios.delete(`/api/notes/${id}`)
+      setSelected(null)
+      fetchNotes()
+    } catch (e) { console.error(e) }
   }
 
   return (
@@ -242,7 +283,7 @@ export default function MyNotes() {
         {notes.map(n => <NoteCard key={n._id} note={n} onOpen={setSelected} />)}
       </div>
 
-      {selected && <NoteViewer note={selected} onClose={() => setSelected(null)} onUpdate={updateNote} />}
+      {selected && <NoteViewer note={selected} onClose={() => setSelected(null)} onUpdate={updateNote} onDelete={deleteNote} />}
     </div>
   )
 }

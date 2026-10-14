@@ -14,10 +14,19 @@ export default function PartnerMatch() {
   const [profile, setProfile] = useState(null)
   const messagesEndRef = useRef()
 
+  const chatUserRef = useRef(chatUser)
+  useEffect(() => { chatUserRef.current = chatUser }, [chatUser])
+
   useEffect(() => {
-    axios.get('https://study-buddy-production-16e9.up.railway.app/api/users').then(r => { setUsers(r.data); setFiltered(r.data) }).catch(() => {})
-    socket.on('dm:receive', (m) => setMessages(ms => [...ms, m]))
-    return () => socket.off('dm:receive')
+    axios.get('/api/users').then(r => { setUsers(r.data); setFiltered(r.data) }).catch(() => {})
+    const handleDm = (m) => {
+      const activeId = chatUserRef.current?._id
+      if (activeId && (m.from === activeId || m.to === activeId)) {
+        setMessages(ms => [...ms, m])
+      }
+    }
+    socket.on('dm:receive', handleDm)
+    return () => socket.off('dm:receive', handleDm)
   }, [])
 
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
@@ -29,7 +38,7 @@ export default function PartnerMatch() {
 
   const openChat = async (u) => {
     setChatUser(u)
-    try { const { data } = await axios.get(`https://study-buddy-production-16e9.up.railway.app/api/messages/dm/${u._id}`); setMessages(data) } catch (e) {}
+    try { const { data } = await axios.get(`/api/messages/dm/${u._id}`); setMessages(data) } catch (e) {}
   }
 
   const sendMsg = (e) => {
@@ -40,7 +49,7 @@ export default function PartnerMatch() {
   }
 
   const sendRequest = async (userId) => {
-    try { await axios.post(`https://study-buddy-production-16e9.up.railway.app/api/users/request/${userId}`); alert('Friend request sent!') } catch (e) {}
+    try { await axios.post(`/api/users/request/${userId}`); alert('Friend request sent!') } catch (e) {}
   }
 
   return (
